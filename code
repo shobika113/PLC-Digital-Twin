@@ -1,0 +1,102 @@
+#include <WiFi.h>
+#include <WiFiUdp.h>
+
+/* WiFi credentials */
+const char* ssid     = "";
+const char* password = "";
+
+/* ---- STATIC IP CONFIG ---- */
+IPAddress local_IP(192, 168, 56, 65);   // << FIXED IP
+IPAddress gateway(192, 168, 56, 1);     // Router IP
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8);
+IPAddress secondaryDNS(8, 8, 4, 4);
+
+/* UDP */
+WiFiUDP udp;
+const int udpPort = 4210;
+char incomingPacket[32];
+
+/* Motor control pins */
+const int pins[6] = {16, 17, 18, 19, 33, 25};
+
+void setup() {
+  Serial.begin(115200);
+
+  /* Pin setup */
+  for (int i = 0; i < 6; i++) {
+    pinMode(pins[i], OUTPUT);
+    digitalWrite(pins[i], LOW);
+  }
+
+  /* WiFi setup */
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(true);
+
+  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+    Serial.println("Failed to configure static IP");
+  }
+
+  WiFi.begin(ssid, password);
+
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nWiFi connected");
+  Serial.print("ESP32 Static IP: ");
+  Serial.println(WiFi.localIP());
+
+  udp.begin(udpPort);
+  Serial.print("Listening on UDP port ");
+  Serial.println(udpPort);
+}
+
+void loop() {
+  int packetSize = udp.parsePacket();
+  if (!packetSize) return;
+
+  int len = udp.read(incomingPacket, sizeof(incomingPacket) - 1);
+  if (len > 0) incomingPacket[len] = '\0';
+
+  String msg = String(incomingPacket);
+  Serial.print("Received: ");
+  Serial.println(msg);
+
+  /* Motion commands */
+  if (msg == "FORWARD:START") {
+    digitalWrite(pins[0], HIGH);
+    digitalWrite(pins[1], LOW);
+  }
+  else if (msg == "REVERSE:START") {
+    digitalWrite(pins[0], LOW);
+    digitalWrite(pins[1], HIGH);
+  }
+  else if (msg == "UP:START") {
+    digitalWrite(pins[2], HIGH);
+    digitalWrite(pins[3], LOW);
+  }
+  else if (msg == "DOWN:START") {
+    digitalWrite(pins[2], LOW);
+    digitalWrite(pins[3], HIGH);
+  }
+  else if (msg == "CLOCKWISE:START") {
+    digitalWrite(pins[4], HIGH);
+    digitalWrite(pins[5], LOW);
+  }
+  else if (msg == "ANTICLOCKWISE:START") {
+    digitalWrite(pins[4], LOW);
+    digitalWrite(pins[5], HIGH);
+  }
+
+  /* Stop commands */
+  else if (msg == "FORWARD:STOP") digitalWrite(pins[0], LOW);
+  else if (msg == "REVERSE:STOP") digitalWrite(pins[1], LOW);
+  else if (msg == "UP:STOP") digitalWrite(pins[2], LOW);
+  else if (msg == "DOWN:STOP") digitalWrite(pins[3], LOW);
+  else if (msg == "CLOCKWISE:STOP") digitalWrite(pins[4], LOW);
+  else if (msg == "ANTICLOCKWISE:STOP") digitalWrite(pins[5], LOW);
+}
